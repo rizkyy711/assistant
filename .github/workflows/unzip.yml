@@ -2,36 +2,55 @@ name: Auto Unzip File
 
 on:
   push:
-    paths:
-      - '*.zip' # Berjalan otomatis hanya jika ada file .zip yang di-push
+    branches:
+      - main # Menjalankan otomatis setiap ada push/upload ke branch main
 
 jobs:
   unzip-process:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Diperlukan agar GitHub Actions bisa commit kembali hasil ekstrak
+      contents: write
 
     steps:
-      # 1. Checkout repositori kamu
+      # 1. Checkout repositori beserta seluruh filenya
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
-      # 2. Cari dan Ekstrak file zip
+      # 2. Cek apakah ada file zip, jika ada baru diekstrak
       - name: Unzip File
         run: |
+          ls -la # Menampilkan daftar file untuk memastikan zip-nya ada
+          
+          # Cari semua file .zip di folder utama
+          found_zip=false
           for file in *.zip; do
             if [ -f "$file" ]; then
-              echo "Mengekstrak $file..."
-              unzip -o "$file" -d ./hasil-ekstrak # Menyimpan hasil ke folder 'hasil-ekstrak'
-              rm "$file" # Hapus file .zip asli agar repo tidak penuh (opsional)
+              echo "Menemukan file: $file. Sedang mengekstrak..."
+              unzip -o "$file" -d . # Mengekstrak langsung ke folder utama (root)
+              rm "$file" # Menghapus file zip asli setelah diekstrak
+              found_zip=true
             fi
           done
+          
+          if [ "$found_zip" = false ]; then
+            echo "Tidak ada file .zip yang ditemukan di root repositori."
+          fi
 
       # 3. Commit dan Push kembali hasil ekstrak ke GitHub
       - name: Commit and Push Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Tambahkan semua file hasil ekstrak
           git add .
-          git commit -m "Auto-unzip file [skip ci]" || echo "Tidak ada perubahan untuk di-commit"
-          git push
+          
+          # Commit jika ada perubahan baru
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "Auto-unzip file hasil upload [skip ci]"
+            git push origin main
+          else
+            echo "Tidak ada file baru yang perlu disimpan."
+          fi
