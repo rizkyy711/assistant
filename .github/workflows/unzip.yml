@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '**.zip' # SCRIPT HANYA AKAN JALAN JIKA ADA FILE .ZIP MASUK
 
 jobs:
   unzip-process:
@@ -12,41 +14,25 @@ jobs:
       contents: write
 
     steps:
-      # 1. Ambil file dari repositori
+      # 1. Ambil file dari repositori dengan token keamanan bawaan
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Intip isi folder untuk memastikan file zip-nya masuk atau tidak
-      - name: Cek Daftar File
-        run: |
-          echo "=== DAFTAR FILE DI REPO ==="
-          ls -la
-          echo "==========================="
-
-      # 3. Proses Unzip dengan pengaman (agar tidak langsung error merah)
+      # 2. Proses Ekstrak Aman
       - name: Ekstrak File Zip
         run: |
-          found_zip=false
+          # Cari file zip di root folder
           for file in *.zip; do
             if [ -f "$file" ]; then
-              echo "Menemukan file zip: $file"
-              # Pastikan aplikasi unzip terinstall
-              sudo apt-get update && sudo apt-get install -y unzip
-              
-              # Lakukan ekstrak langsung ke root
-              unzip -o "$file" -d . || echo "Gagal mengekstrak $file (mungkin file zip rusak/kosong)"
-              
-              # Hapus file asli
+              echo "Mengekstrak file: $file"
+              unzip -o "$file" -d .
               rm "$file"
-              found_zip=true
             fi
           done
-          
-          if [ "$found_zip" = false ]; then
-            echo "Peringatan: Tidak ada file .zip yang terdeteksi di root folder!"
-          fi
 
-      # 4. Simpan kembali perubahan ke GitHub
+      # 3. Simpan Balik ke GitHub (Menggunakan metode paksa agar tidak bentrok)
       - name: Commit dan Push Hasil
         run: |
           git config --global user.name "github-actions[bot]"
@@ -55,9 +41,8 @@ jobs:
           git add -A
           
           if ! git diff-index --quiet HEAD; then
-            echo "Ada file baru, melakukan commit..."
             git commit -m "Auto-unzip file hasil upload [skip ci]"
             git push origin main
           else
-            echo "Aman. Tidak ada perubahan file baru yang perlu dicommit."
+            echo "Aman, tidak ada perubahan."
           fi
