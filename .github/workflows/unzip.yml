@@ -3,7 +3,7 @@ name: Auto Unzip File
 on:
   push:
     branches:
-      - main # Menjalankan otomatis setiap ada push/upload ke branch main
+      - main
 
 jobs:
   unzip-process:
@@ -12,45 +12,52 @@ jobs:
       contents: write
 
     steps:
-      # 1. Checkout repositori beserta seluruh filenya
+      # 1. Ambil file dari repositori
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
-      # 2. Cek apakah ada file zip, jika ada baru diekstrak
-      - name: Unzip File
+      # 2. Intip isi folder untuk memastikan file zip-nya masuk atau tidak
+      - name: Cek Daftar File
         run: |
-          ls -la # Menampilkan daftar file untuk memastikan zip-nya ada
-          
-          # Cari semua file .zip di folder utama
+          echo "=== DAFTAR FILE DI REPO ==="
+          ls -la
+          echo "==========================="
+
+      # 3. Proses Unzip dengan pengaman (agar tidak langsung error merah)
+      - name: Ekstrak File Zip
+        run: |
           found_zip=false
           for file in *.zip; do
             if [ -f "$file" ]; then
-              echo "Menemukan file: $file. Sedang mengekstrak..."
-              unzip -o "$file" -d . # Mengekstrak langsung ke folder utama (root)
-              rm "$file" # Menghapus file zip asli setelah diekstrak
+              echo "Menemukan file zip: $file"
+              # Pastikan aplikasi unzip terinstall
+              sudo apt-get update && sudo apt-get install -y unzip
+              
+              # Lakukan ekstrak langsung ke root
+              unzip -o "$file" -d . || echo "Gagal mengekstrak $file (mungkin file zip rusak/kosong)"
+              
+              # Hapus file asli
+              rm "$file"
               found_zip=true
             fi
           done
           
           if [ "$found_zip" = false ]; then
-            echo "Tidak ada file .zip yang ditemukan di root repositori."
+            echo "Peringatan: Tidak ada file .zip yang terdeteksi di root folder!"
           fi
 
-      # 3. Commit dan Push kembali hasil ekstrak ke GitHub
-      - name: Commit and Push Changes
+      # 4. Simpan kembali perubahan ke GitHub
+      - name: Commit dan Push Hasil
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Tambahkan semua file hasil ekstrak
-          git add .
+          git add -A
           
-          # Commit jika ada perubahan baru
           if ! git diff-index --quiet HEAD; then
+            echo "Ada file baru, melakukan commit..."
             git commit -m "Auto-unzip file hasil upload [skip ci]"
             git push origin main
           else
-            echo "Tidak ada file baru yang perlu disimpan."
+            echo "Aman. Tidak ada perubahan file baru yang perlu dicommit."
           fi
